@@ -13,54 +13,64 @@ var (
 	SonyflakeHasNotInitErr = errors.New("sonyflake not init")
 )
 
-var (
-	sonyFlake     *sonyflake.Sonyflake
-	sonyMachineID uint16
-)
+type Generator struct {
+	etcd      *clientv3.Client
+	addr      string
+	sonyFlake *sonyflake.Sonyflake
+}
 
-// Init init sonyflake and set machine id
-func Init(etcd *clientv3.Client, addr string) error {
-	err := setMachineID(etcd, addr)
+// NewGenerator create a new generator
+func NewGenerator(etcd *clientv3.Client, addr string) (*Generator, error) {
+	gen := &Generator{
+		etcd: etcd,
+		addr: addr,
+	}
+
+	machineID, err := gen.setMachineID(addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var st sonyflake.Settings
 	st.MachineID = func() (uint16, error) {
-		return sonyMachineID, nil
+		return machineID, nil
 	}
-	sonyFlake = sonyflake.NewSonyflake(st)
-	return nil
+
+	return &Generator{
+		etcd:      etcd,
+		addr:      addr,
+		sonyFlake: sonyflake.NewSonyflake(st),
+	}, nil
 }
 
 // GetID get a snowflake id
-func GetID() (uint64, error) {
-	if sonyFlake == nil {
+func (gen *Generator) GetID() (uint64, error) {
+	if gen.sonyFlake == nil {
 		return 0, SonyflakeHasNotInitErr
 	}
 
-	id, err := sonyFlake.NextID()
+	id, err := gen.sonyFlake.NextID()
 	if err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
-func setMachineID(etcd *clientv3.Client, addr string) error {
+func (gen *Generator) setMachineID(addr string) (uint16, error) {
 	if len(addr) == 0 {
-		return errors.New("address is empty")
+		return 0, errors.New("address is empty")
 	}
 
 	ctx := context.Background()
 	key := "machine_id_" + addr
-	if _, err := etcd.Put(ctx, key, "0"); err != nil {
-		return err
+	if _, err := gen.etcd.Put(ctx, key, "0"); err != nil {
+		return 0, err
 	}
 
 	// get all machine_id
-	resp, err := etcd.Get(ctx, "machine_id", clientv3.WithPrefix())
+	resp, err := gen.etcd.Get(ctx, "machine_id", clientv3.WithPrefix())
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	kvList := resp.Kvs
@@ -73,9 +83,8 @@ func setMachineID(etcd *clientv3.Client, addr string) error {
 	// find the machine_id
 	for i, kv := range kvList {
 		if string(kv.Key) == key {
-			sonyMachineID = uint16(i)
-			return nil
+			return uint16(i), nil
 		}
 	}
-	return NoSuchNodeErr
+	return 0, NoSuchNodeErr
 }

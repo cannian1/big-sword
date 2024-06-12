@@ -26,10 +26,10 @@ func TestGetID(t *testing.T) {
 	cli, err := createEtcdClient()
 	assert.Nil(t, err)
 
-	err = Init(cli, "8080")
+	gennerator, err := NewGenerator(cli, "8080")
 	assert.Nil(t, err)
 
-	id, err := GetID()
+	id, err := gennerator.GetID()
 	assert.Nil(t, err)
 	t.Logf("id: %d", id)
 }
