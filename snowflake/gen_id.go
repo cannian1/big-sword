@@ -67,7 +67,7 @@ func setMachineID(etcd *clientv3.Client, addr string) error {
 
 	// sort by create revision
 	sort.Slice(kvList, func(i, j int) bool {
-		return kvList[i].CreateRevision < kvList[j].CreateRevision
+		return kvList[i].CreateRevision > kvList[j].CreateRevision // new machine_id is in front
 	})
 
 	// find the machine_id
